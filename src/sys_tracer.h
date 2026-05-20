@@ -43,11 +43,4 @@ union syscall_data_t {
     } close;
 };
 
-struct output_data_t {
-    __u64 id;
-    struct proc_data_t proc_data;
-    __s16 syscall;
-    union syscall_data_t syscall_data;
-};
-
 #endif
