@@ -42,10 +42,11 @@ int print_proc_data(void *ctx, void *data, size_t size) {
 
     struct syscall_stats_key_t key;
     union syscall_data_t syscall_data;
+
     key.id = *id;
-    for (int i = 0; i < SYSCALLS_MAX; i++) {
+    for (__u64 i = 0; i < SYSCALLS_MAX; i++) {
         key.syscall = i;
-        err = bpf_map__lookup_elem(c_ctx->syscall_stats, &key, sizeof(struct syscall_stats_key_t), &syscall_data, sizeof(union syscall_data_t), 0);
+        err = bpf_map__lookup_and_delete_elem(c_ctx->syscall_stats, &key, sizeof(struct syscall_stats_key_t), &syscall_data, sizeof(union syscall_data_t), 0);
 
         if (err < 0) {
             continue;
