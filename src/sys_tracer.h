@@ -1,13 +1,16 @@
 #ifndef SYS_TRACER_H
 #define SYS_TRACER_H
 
-#define PROC_NAME_SIZE 25
+#define PROC_NAME_SIZE 32
+#define MAX_ARGS 8
+#define ARG_SIZE 80
 
 enum syscalls {
     SYS_READ,
     SYS_WRITE,
     SYS_OPEN,
     SYS_CLOSE,
+    SYS_EXECVE = 0x3b,
     SYSCALLS_MAX,
 };
 
@@ -15,6 +18,7 @@ struct proc_data_t {
     __u64 enter_ns;
     __u64 exit_ns;
     char proc_name[PROC_NAME_SIZE];
+    char proc_args[MAX_ARGS][ARG_SIZE];
 };
 
 struct syscall_stats_key_t {

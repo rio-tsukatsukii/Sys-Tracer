@@ -17,33 +17,53 @@ static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va
     return vfprintf(stderr, format, args);
 }
 
-void cleanup_maps(__u64 id, struct bpf_map *proc_data, struct bpf_map *syscall_stats) {
+int print_proc_data(void *ctx, void *data, size_t size) {
+    __u64 *id = data;
+    struct cleanup_ctx *c_ctx = ctx;
+    struct proc_data_t proc_data;
+    int err;
+    err = bpf_map__lookup_and_delete_elem(c_ctx->proc_data, id, sizeof(__u64), &proc_data, sizeof(struct proc_data_t), 0);
+
+    if (err < 0) {
+        fprintf(stderr, "%llu could not be found in proc_data\n", *id);
+        return 0;
+    }
+
+    printf("[exec]      %s", proc_data.proc_name);
+
+    for (int i = 0; i < MAX_ARGS; i++) {
+        if (!proc_data.proc_args[i]) {
+            break;
+        }
+
+        printf(" %s", proc_data.proc_args[i]);
+    }
+    putchar('\n');
+
     struct syscall_stats_key_t key;
-    key.id = id;
+    union syscall_data_t syscall_data;
+    key.id = *id;
     for (int i = 0; i < SYSCALLS_MAX; i++) {
         key.syscall = i;
-        bpf_map__lookup_and_delete_elem(syscall_stats, &key, sizeof(struct syscall_stats_key_t), NULL, sizeof(union syscall_data_t), 0);
+        err = bpf_map__lookup_elem(c_ctx->syscall_stats, &key, sizeof(struct syscall_stats_key_t), &syscall_data, sizeof(union syscall_data_t), 0);
+
+        if (err < 0) {
+            continue;
+        }
+
+        switch (i) {
+            case SYS_READ:
+                printf("[sys_read]  %llu bytes over %llu calls\n", syscall_data.read.bytes_total, syscall_data.read.count);
+                break;
+            case SYS_WRITE:
+                printf("[sys_write] %llu bytes over %llu calls\n", syscall_data.write.bytes_total, syscall_data.write.count);
+                break;
+        }
     }
 
-    bpf_map__lookup_and_delete_elem(proc_data, &id, sizeof(id), NULL, sizeof(struct proc_data_t), 0);
-}
+    printf("[exec]      took %.3f ms\n\n", (proc_data.exit_ns - proc_data.enter_ns) / 1e6);
 
-int print_execve(void *ctx, void *data, size_t size) {
-    struct output_data_t *p = data;
-    struct cleanup_ctx *c_ctx = ctx;
-
-    switch (p->syscall) {
-        case SYS_READ:
-            printf("%s attempted to read %llu\n", p->proc_data.proc_name, p->syscall_data.read.bytes_total);
-            break;
-        case SYS_WRITE:
-            printf("%s attempted to read %llu\n", p->proc_data.proc_name, p->syscall_data.write.bytes_total);
-            break;
-        case -1:
-            printf("%s ran for %.3f ms\n", p->proc_data.proc_name, (p->proc_data.exit_ns - p->proc_data.enter_ns) / 1e6);
-            cleanup_maps(p->id, c_ctx->proc_data, c_ctx->syscall_stats);
-            break;
-    }
+    (void) size;
 
     return 0;
 }
@@ -72,7 +92,7 @@ int main() {
     ctx.proc_data = skel->maps.proc_data;
     ctx.syscall_stats = skel->maps.syscall_stats;
 
-    rb = ring_buffer__new(bpf_map__fd(skel->maps.out_ringbuf), print_execve, &ctx, NULL);
+    rb = ring_buffer__new(bpf_map__fd(skel->maps.out_ringbuf), print_proc_data, &ctx, NULL);
     if (!rb) {
         err = -1;
         fprintf(stderr, "Failed to create ring buffer\n");

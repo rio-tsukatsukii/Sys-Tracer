@@ -28,11 +28,24 @@ struct {
 struct proc_data_t empty_proc_data = {};
 union syscall_data_t empty_syscall_data = {};
 
+struct enter_exec_params_t {
+    unsigned short common_type;
+    unsigned char common_flags;
+    unsigned char common_preempt_count;
+    int common_pid;
+
+    int __syscall_nr;
+    const char *filename;
+    const char *const *argv;
+    const char *const *envp;
+};
+
 SEC("tp/syscalls/sys_enter_execve")
-int handle_enter_execve(struct trace_event_raw_sys_enter *ctx) {
+int handle_enter_execve(struct enter_exec_params_t *ctx) {
     __u64 id = bpf_get_current_pid_tgid();
     int err;
     struct proc_data_t *data;
+    const char *const *argv = ctx->argv + 1;
 
     err = bpf_map_update_elem(&proc_data, &id, &empty_proc_data, BPF_NOEXIST);
     if (err < 0) {
@@ -41,19 +54,36 @@ int handle_enter_execve(struct trace_event_raw_sys_enter *ctx) {
 
     data = bpf_map_lookup_elem(&proc_data, &id);
     if (!data) {
-        return 0;
+        goto ret;
     }
 
     data->enter_ns = bpf_ktime_get_ns();
 
     /* Kernel never copies these into kernel memory, they remain in userspace memory */
-    err = bpf_probe_read_user_str(data->proc_name, sizeof(data->proc_name), (const char *) ctx->args[0]);
+    err = bpf_probe_read_user_str(data->proc_name, PROC_NAME_SIZE, ctx->filename);
 
     if (err < 0) {
         bpf_map_delete_elem(&proc_data, &id);
-        return 0;
+        goto ret;
     }
 
+    for (int i = 0; i < MAX_ARGS; i++) {
+        const char *argp = NULL;
+
+        bpf_probe_read_user(&argp, sizeof(argp), &argv[i]);
+
+        if (!argp)
+            break;
+
+        err = bpf_probe_read_user_str(&data->proc_args[i], ARG_SIZE, argp);
+
+        if (err < 0) {
+            bpf_map_delete_elem(&proc_data, &id);
+            goto ret;
+        }
+    }
+
+ret:
     return 0;
 }
 
@@ -64,20 +94,22 @@ int handle_process_exit(struct trace_event_raw_sys_exit *ctx) {
 
     data = bpf_map_lookup_elem(&proc_data, &id);
     if (!data) {
-        return 0;
+        goto ret;
     }
 
-    struct output_data_t *out_data = bpf_ringbuf_reserve(&out_ringbuf, sizeof(struct output_data_t), 0);
-    if (!out_data) {
-        return 0;
+    data->exit_ns = bpf_ktime_get_ns();
+
+    __u64 *key = bpf_ringbuf_reserve(&out_ringbuf, sizeof(__u64), 0);
+
+    if (!key) {
+        goto ret;
     }
 
-    __builtin_memcpy(&out_data->proc_data, data, sizeof(struct proc_data_t));
-    out_data->proc_data.exit_ns = bpf_ktime_get_ns();
-    out_data->syscall = -1;
+    *key = id;
 
-    bpf_ringbuf_submit(out_data, 0);
+    bpf_ringbuf_submit(key, 0);
 
+ret:
     return 0;
 }
 
@@ -91,7 +123,7 @@ int handle_enter_read(struct trace_event_raw_sys_enter *ctx) {
 
     data = bpf_map_lookup_elem(&proc_data, &id);
     if (!data) {
-        return 0;
+        goto ret;
     }
 
     key.id = id;
@@ -99,29 +131,18 @@ int handle_enter_read(struct trace_event_raw_sys_enter *ctx) {
 
     err = bpf_map_update_elem(&syscall_stats, &key, &empty_syscall_data, BPF_NOEXIST);
     if (err < 0) {
-        return 0;
+        goto ret;
     }
 
     syscall_data = bpf_map_lookup_elem(&syscall_stats, &key);
     if (!syscall_data) {
-        return 0;
+        goto ret;
     }
 
     syscall_data->read.count++;
     syscall_data->read.bytes_total += ctx->args[2];
 
-    struct output_data_t *out_data = bpf_ringbuf_reserve(&out_ringbuf, sizeof(struct output_data_t), 0);
-    if (!out_data) {
-        return 0;
-    }
-
-    __builtin_memcpy(&out_data->proc_data, data, sizeof(struct proc_data_t));
-    out_data->syscall = SYS_READ;
-    __builtin_memcpy(&out_data->syscall_data, syscall_data, sizeof(union syscall_data_t));
-
-
-    bpf_ringbuf_submit(out_data, 0);
-
+ret:
     return 0;
 }
 
@@ -135,7 +156,7 @@ int handle_enter_write(struct trace_event_raw_sys_enter *ctx) {
 
     data = bpf_map_lookup_elem(&proc_data, &id);
     if (!data) {
-        return 0;
+        goto ret;
     }
 
     key.id = id;
@@ -143,29 +164,18 @@ int handle_enter_write(struct trace_event_raw_sys_enter *ctx) {
 
     err = bpf_map_update_elem(&syscall_stats, &key, &empty_syscall_data, BPF_NOEXIST);
     if (err < 0) {
-        return 0;
+        goto ret;
     }
 
     syscall_data = bpf_map_lookup_elem(&syscall_stats, &key);
     if (!syscall_data) {
-        return 0;
+        goto ret;
     }
 
     syscall_data->write.count++;
     syscall_data->write.bytes_total += ctx->args[2];
 
-    struct output_data_t *out_data = bpf_ringbuf_reserve(&out_ringbuf, sizeof(struct output_data_t), 0);
-    if (!out_data) {
-        return 0;
-    }
-
-    __builtin_memcpy(&out_data->proc_data, data, sizeof(struct proc_data_t));
-    out_data->syscall = SYS_WRITE;
-    __builtin_memcpy(&out_data->syscall_data, syscall_data, sizeof(union syscall_data_t));
-
-
-    bpf_ringbuf_submit(out_data, 0);
-
+ret:
     return 0;
 }
 
