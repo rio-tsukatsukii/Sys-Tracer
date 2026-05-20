@@ -109,6 +109,7 @@ int handle_process_exit(struct trace_event_raw_sys_exit *ctx) {
 
     bpf_ringbuf_submit(key, 0);
 
+    (void) ctx;
 ret:
     return 0;
 }
