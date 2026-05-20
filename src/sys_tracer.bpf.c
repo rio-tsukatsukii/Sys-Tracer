@@ -83,6 +83,23 @@ int handle_enter_execve(struct enter_exec_params_t *ctx) {
         }
     }
 
+    struct syscall_stats_key_t key;
+
+    key.id = id;
+    key.syscall = SYS_READ;
+
+    err = bpf_map_update_elem(&syscall_stats, &key, &empty_syscall_data, BPF_NOEXIST);
+    if (err < 0) {
+        bpf_map_delete_elem(&proc_data, &id);
+        goto ret;
+    }
+
+    key.syscall = SYS_WRITE;
+
+    err = bpf_map_update_elem(&syscall_stats, &key, &empty_syscall_data, BPF_NOEXIST);
+    if (err < 0)
+        bpf_map_delete_elem(&proc_data, &id);
+
 ret:
     return 0;
 }
@@ -114,35 +131,53 @@ ret:
     return 0;
 }
 
+struct exit_read_write_params_t {
+    unsigned short common_type;
+    unsigned char common_flags;
+    unsigned char common_preempt_count;
+    int common_pid;
+
+    int __syscall_nr;
+    long ret;
+};
+
 SEC("tp/syscalls/sys_enter_read")
 int handle_enter_read(struct trace_event_raw_sys_enter *ctx) {
     __u64 id = bpf_get_current_pid_tgid();
-    int err;
-    struct proc_data_t *data;
-    struct syscall_stats_key_t key;
+    struct syscall_stats_key_t key = {0};
     union syscall_data_t *syscall_data;
-
-    data = bpf_map_lookup_elem(&proc_data, &id);
-    if (!data) {
-        goto ret;
-    }
 
     key.id = id;
     key.syscall = SYS_READ;
 
-    err = bpf_map_update_elem(&syscall_stats, &key, &empty_syscall_data, BPF_NOEXIST);
-    if (err < 0) {
-        goto ret;
-    }
-
     syscall_data = bpf_map_lookup_elem(&syscall_stats, &key);
-    if (!syscall_data) {
+    if (!syscall_data)
         goto ret;
-    }
 
     syscall_data->read.count++;
-    syscall_data->read.bytes_total += ctx->args[2];
 
+    (void) ctx;
+ret:
+    return 0;
+}
+
+SEC("tp/syscalls/sys_exit_read")
+int handle_exit_read(struct exit_read_write_params_t *ctx) {
+    if (ctx->ret < 0)
+        goto ret;
+
+    __u64 id = bpf_get_current_pid_tgid();
+    struct syscall_stats_key_t key = {0};
+    union syscall_data_t *syscall_data;
+
+    key.id = id;
+    key.syscall = SYS_READ;
+
+    syscall_data = bpf_map_lookup_elem(&syscall_stats, &key);
+    if (!syscall_data)
+        goto ret;
+
+    syscall_data->read.bytes_total += ctx->ret;
 ret:
     return 0;
 }
@@ -150,32 +185,40 @@ ret:
 SEC("tp/syscalls/sys_enter_write")
 int handle_enter_write(struct trace_event_raw_sys_enter *ctx) {
     __u64 id = bpf_get_current_pid_tgid();
-    int err;
-    struct proc_data_t *data;
-    struct syscall_stats_key_t key;
+    struct syscall_stats_key_t key = {0};
     union syscall_data_t *syscall_data;
-
-    data = bpf_map_lookup_elem(&proc_data, &id);
-    if (!data) {
-        goto ret;
-    }
 
     key.id = id;
     key.syscall = SYS_WRITE;
 
-    err = bpf_map_update_elem(&syscall_stats, &key, &empty_syscall_data, BPF_NOEXIST);
-    if (err < 0) {
-        goto ret;
-    }
-
     syscall_data = bpf_map_lookup_elem(&syscall_stats, &key);
-    if (!syscall_data) {
+    if (!syscall_data)
         goto ret;
-    }
 
     syscall_data->write.count++;
-    syscall_data->write.bytes_total += ctx->args[2];
 
+    (void) ctx;
+ret:
+    return 0;
+}
+
+SEC("tp/syscalls/sys_exit_write")
+int handle_exit_write(struct exit_read_write_params_t *ctx) {
+    if (ctx->ret < 0)
+        goto ret;
+
+    __u64 id = bpf_get_current_pid_tgid();
+    struct syscall_stats_key_t key = {0};
+    union syscall_data_t *syscall_data;
+
+    key.id = id;
+    key.syscall = SYS_WRITE;
+
+    syscall_data = bpf_map_lookup_elem(&syscall_stats, &key);
+    if (!syscall_data)
+        goto ret;
+
+    syscall_data->write.bytes_total += ctx->ret;
 ret:
     return 0;
 }
