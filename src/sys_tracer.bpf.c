@@ -97,8 +97,11 @@ int handle_enter_execve(struct enter_exec_params_t *ctx) {
     key.syscall = SYS_WRITE;
 
     err = bpf_map_update_elem(&syscall_stats, &key, &empty_syscall_data, BPF_NOEXIST);
-    if (err < 0)
+    if (err < 0) {
+        key.syscall = SYS_READ;
+        bpf_map_delete_elem(&syscall_stats, &key);
         bpf_map_delete_elem(&proc_data, &id);
+    }
 
 ret:
     return 0;
