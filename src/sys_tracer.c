@@ -54,10 +54,14 @@ int print_proc_data(void *ctx, void *data, size_t size) {
 
         switch (i) {
             case SYS_READ:
-                printf("[sys_read]  %llu bytes over %llu calls\n", syscall_data.read.bytes_total, syscall_data.read.count);
+                if (syscall_data.read.count > 0) {
+                    printf("[sys_read]  %llu bytes over %llu calls\n", syscall_data.read.bytes_total, syscall_data.read.count);
+                }
                 break;
             case SYS_WRITE:
-                printf("[sys_write] %llu bytes over %llu calls\n", syscall_data.write.bytes_total, syscall_data.write.count);
+                if (syscall_data.write.count > 0) {
+                    printf("[sys_write] %llu bytes over %llu calls\n", syscall_data.write.bytes_total, syscall_data.write.count);
+                }
                 break;
         }
     }
