@@ -31,11 +31,7 @@ int print_proc_data(void *ctx, void *data, size_t size) {
 
     printf("[exec]      %s", proc_data.proc_name);
 
-    for (int i = 0; i < MAX_ARGS; i++) {
-        if (!proc_data.proc_args[i]) {
-            break;
-        }
-
+    for (int i = 0; proc_data.proc_args[i][0] != '\0' && i < MAX_ARGS; i++) {
         printf(" %s", proc_data.proc_args[i]);
     }
     putchar('\n');

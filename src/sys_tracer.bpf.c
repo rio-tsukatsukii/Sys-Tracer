@@ -43,7 +43,7 @@ struct enter_exec_params_t {
 SEC("tp/syscalls/sys_enter_execve")
 int handle_enter_execve(struct enter_exec_params_t *ctx) {
     __u64 id = bpf_get_current_pid_tgid();
-    int err;
+    int err, i;
     struct proc_data_t *data;
     const char *const *argv = ctx->argv + 1;
 
@@ -67,13 +67,14 @@ int handle_enter_execve(struct enter_exec_params_t *ctx) {
         goto ret;
     }
 
-    for (int i = 0; i < MAX_ARGS; i++) {
+    for (i = 0; i < (MAX_ARGS - 1); i++) {
         const char *argp = NULL;
 
         bpf_probe_read_user(&argp, sizeof(argp), &argv[i]);
 
-        if (!argp)
+        if (!argp) {
             break;
+        }
 
         err = bpf_probe_read_user_str(&data->proc_args[i], ARG_SIZE, argp);
 
@@ -82,6 +83,8 @@ int handle_enter_execve(struct enter_exec_params_t *ctx) {
             goto ret;
         }
     }
+
+    data->proc_args[i][0] = '\0';
 
     struct syscall_stats_key_t key;
 
