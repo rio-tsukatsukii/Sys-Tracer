@@ -18,12 +18,12 @@ Per-process state and syscall statistics are stored in BPF hash maps.
 - libbpf
 - bpftool
 - kernel config options:
- - CONFIG_BPF=y
- - CONFIG_BPF_SYSCALL=y
- - CONFIG_BPF_JIT=y
- - CONFIG_DEBUG_INFO=y
- - CONFIG_DEBUG_INFO_DWARF5=y OR CONFIG_DEBUG_INFO_DWARF4=y
- - CONFIG_DEBUG_INFO_BTF=y
+  - CONFIG_BPF=y
+  - CONFIG_BPF_SYSCALL=y
+  - CONFIG_BPF_JIT=y
+  - CONFIG_DEBUG_INFO=y
+  - CONFIG_DEBUG_INFO_DWARF5=y OR CONFIG_DEBUG_INFO_DWARF4=y
+  - CONFIG_DEBUG_INFO_BTF=y
 
 ---
 
