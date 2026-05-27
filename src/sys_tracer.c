@@ -62,7 +62,7 @@ int print_proc_data(void *ctx, void *data, size_t size) {
         }
     }
 
-    printf("[exec]      took %.3f ms\n\n", (proc_data.exit_ns - proc_data.enter_ns) / 1e6);
+    printf("[exec]      took %.3Lf ms\n\n", proc_data.runtime / 1e6L);
 
     (void) size;
 

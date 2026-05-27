@@ -15,8 +15,7 @@ enum syscalls {
 };
 
 struct proc_data_t {
-    __u64 enter_ns;
-    __u64 exit_ns;
+    __u64 runtime;
     char proc_name[PROC_NAME_SIZE];
     char proc_args[MAX_ARGS][ARG_SIZE];
 };
