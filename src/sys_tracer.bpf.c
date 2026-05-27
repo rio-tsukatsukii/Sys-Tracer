@@ -46,6 +46,7 @@ int handle_enter_execve(struct enter_exec_params_t *ctx) {
     int err, i;
     struct proc_data_t *data;
     const char *const *argv = ctx->argv + 1;
+    struct task_struct *task = (void *) bpf_get_current_task();
 
     err = bpf_map_update_elem(&proc_data, &id, &empty_proc_data, BPF_NOEXIST);
     if (err < 0) {
@@ -57,7 +58,7 @@ int handle_enter_execve(struct enter_exec_params_t *ctx) {
         goto ret;
     }
 
-    data->enter_ns = bpf_ktime_get_ns();
+    data->runtime = BPF_CORE_READ(task, start_time);
 
     /* Kernel never copies these into kernel memory, they remain in userspace memory */
     err = bpf_probe_read_user_str(data->proc_name, PROC_NAME_SIZE, ctx->filename);
@@ -120,7 +121,8 @@ int handle_process_exit(struct trace_event_raw_sys_exit *ctx) {
         goto ret;
     }
 
-    data->exit_ns = bpf_ktime_get_ns();
+    __u64 now = bpf_ktime_get_ns();
+    data->runtime = now - data->runtime;
 
     __u64 *key = bpf_ringbuf_reserve(&out_ringbuf, sizeof(__u64), 0);
 
